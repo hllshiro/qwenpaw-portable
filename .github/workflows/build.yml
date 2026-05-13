@@ -136,7 +136,7 @@ jobs:
         run: |
           $PortableDir = "qwenpaw-portable"
 
-          # Main entry script - with UAC elevation
+          # Main entry script - with UAC elevation (preserves arguments)
           $MainScript = @"
           @echo off
           title QwenPaw
@@ -146,7 +146,8 @@ jobs:
           net session >nul 2>&1
           if !errorLevel! neq 0 (
               echo Requesting administrator privileges...
-              powershell -Command "Start-Process '%~f0' -Verb RunAs"
+              set "ARGS=%*"
+              powershell -Command "Start-Process '%~f0' -Verb RunAs -ArgumentList '!ARGS!'"
               exit /b
           )
 
