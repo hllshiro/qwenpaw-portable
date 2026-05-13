@@ -58,6 +58,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install .[full]
 
+      - name: Build console frontend
+        working-directory: source/console
+        run: |
+          npm ci
+          npm run build
+
       - name: Create portable package structure
         shell: pwsh
         working-directory: source
@@ -75,6 +81,11 @@ jobs:
           }
           @("qwenpaw", "scripts", "resources", "assets", "docs") | ForEach-Object {
             if (Test-Path $_) { Copy-Item $_ "$PortableDir\app\" -Recurse -Force }
+          }
+          # Copy console dist
+          if (Test-Path "console\dist") {
+            Copy-Item "console\dist" "$PortableDir\app\console\dist" -Recurse -Force
+            Write-Host "Console frontend copied."
           }
 
           Write-Host "Application files copied."
@@ -236,6 +247,12 @@ jobs:
           # Show installed package sizes for debugging
           pip list --format=freeze | head -20
 
+      - name: Build console frontend
+        working-directory: source/console
+        run: |
+          npm ci
+          npm run build
+
       - name: Create and fill portable package
         shell: bash
         working-directory: source
@@ -250,6 +267,12 @@ jobs:
           for d in qwenpaw scripts resources assets docs; do
             [ -d "$d" ] && cp -r "$d" "$DIR/app/"
           done
+          # Copy console dist
+          if [ -d "console/dist" ]; then
+            mkdir -p "$DIR/app/console"
+            cp -r console/dist "$DIR/app/console/dist"
+            echo "Console frontend copied."
+          fi
 
           echo "Application files copied."
 
