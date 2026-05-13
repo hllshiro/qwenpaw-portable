@@ -229,6 +229,11 @@ jobs:
         working-directory: source
         run: |
           pip install ".[full]"
+          # Remove GPU packages that bloat the package
+          echo "Removing GPU-related packages to reduce size..."
+          pip uninstall -y triton triton-common 2>/dev/null || true
+          # Show installed package sizes for debugging
+          pip list --format=freeze | head -20
 
       - name: Create and fill portable package
         shell: bash
@@ -277,8 +282,25 @@ jobs:
             [ -d "$p" ] && rm -rf "$p" && echo "Removed: $pkg"
           done
 
+          # Remove GPU-related packages from site-packages
+          echo "Removing GPU packages from site-packages..."
+          SP="$DIR/runtime/lib/python"*/site-packages
+          for pkg in triton triton_common nvidia_nvtx nvidia_cublas nvidia_cuda_cupti nvidia_cuda_nvrtc nvidia_cuda_runtime nvidia_cublas_cuda12 nvidia_cudnn_cuda12 nvidia_cufft nvidia_curand nvidia_cusolver nvidia_cusparse nvidia_nccl nvidia_nvshmem nvidia_nccl_cuda12 nvidia_nvjitlink; do
+            found=$(find $SP -maxdepth 1 -type d -name "${pkg}*" 2>/dev/null | head -1)
+            if [ -n "$found" ]; then
+              rm -rf "$found" && echo "Removed: $(basename $found)"
+            fi
+          done
+          # Also remove dist-info for these packages
+          find $SP -maxdepth 1 -type d -name "nvidia_*" -exec rm -rf {} + 2>/dev/null || true
+          find $SP -maxdepth 1 -type d -name "triton*" -exec rm -rf {} + 2>/dev/null || true
+
           # Remove RECORD files from dist-info (large metadata)
           find "$DIR/runtime" -path "*/dist-info/RECORD" -delete 2>/dev/null || true
+
+          # Show package size after cleanup
+          echo "Package size after cleanup:"
+          du -sh "$DIR"
 
           # Fix shebangs in bin/ scripts
           if [ -d "$DIR/runtime/bin" ]; then
@@ -319,9 +341,15 @@ jobs:
           echo "Package size before compression:"
           du -sh "$DIR"
 
-          # Create tarball using 7z for better compression
+          # Create tarball using pigz (parallel gzip) for speed, fall back to gzip
           TARBALL="qwenpaw-portable-linux-x64-v${{ inputs.version }}.tar.gz"
-          7z a -tgzip "$TARBALL" "$DIR" -mx=7
+          if command -v pigz &> /dev/null; then
+            echo "Using pigz for compression..."
+            tar -cf - "$DIR" | pigz -9 > "$TARBALL"
+          else
+            echo "Using gzip for compression..."
+            tar -czf "$TARBALL" "$DIR"
+          fi
           ls -lh "$TARBALL"
 
       - name: Upload artifact
