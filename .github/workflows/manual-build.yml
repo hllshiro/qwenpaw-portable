@@ -53,4 +53,5 @@ jobs:
     with:
       tag: ${{ needs.resolve.outputs.tag }}
       version: ${{ needs.resolve.outputs.version }}
+      python_version: ${{ github.event.inputs.python_version }}
     secrets: inherit
