@@ -79,7 +79,7 @@ jobs:
           @("pyproject.toml", "setup.py", "setup.cfg", "MANIFEST.in") | ForEach-Object {
             if (Test-Path $_) { Copy-Item $_ "$PortableDir\app\" -Force }
           }
-          @("qwenpaw", "scripts", "resources", "assets", "docs") | ForEach-Object {
+          @("src\qwenpaw", "scripts", "plugins") | ForEach-Object {
             if (Test-Path $_) { Copy-Item $_ "$PortableDir\app\" -Recurse -Force }
           }
           # Copy console dist
@@ -123,6 +123,10 @@ jobs:
             $p = Join-Path $TargetDir $_
             if (Test-Path $p) { Remove-Item $p -Recurse -Force; Write-Host "Removed: $_" }
           }
+          # Remove orphan .pth files referencing deleted packages
+          Get-ChildItem "$TargetDir\Lib\site-packages\*.pth" -ErrorAction SilentlyContinue | ForEach-Object {
+            if ($_.Name -match "distutils") { Remove-Item $_.FullName -Force; Write-Host "Removed: $($_.Name)" }
+          }
 
           # Remove .dist-info RECORD files (large metadata)
           Get-ChildItem -Path "$TargetDir\Lib\site-packages" -Directory -Filter "*.dist-info" | ForEach-Object {
@@ -165,6 +169,7 @@ jobs:
           set "SCRIPT_DIR=%~dp0"
           set "PYTHON=%SCRIPT_DIR%runtime\python.exe"
           set "APP=%SCRIPT_DIR%app"
+          set "PYTHONPATH=%SCRIPT_DIR%app\src"
 
           cd /d "!APP!"
           "!PYTHON!" -m qwenpaw %*
@@ -183,6 +188,9 @@ jobs:
           set "SCRIPT_DIR=%~dp0"
           set "PYTHON=%SCRIPT_DIR%runtime\python.exe"
           set "APP=%SCRIPT_DIR%app"
+          set "PYTHONPATH=%SCRIPT_DIR%app\src"
+
+          cd /d "%APP%"
 
           cd /d "%APP%"
           "!PYTHON!" -m qwenpaw app
@@ -261,10 +269,10 @@ jobs:
           mkdir -p "$DIR/app" "$DIR/runtime" "$DIR/scripts"
 
           # Copy application files
-          for f in pyproject.toml setup.py setup.cfg MANIFEST.in; do
+          for f in pyproject.toml setup.py setup.cfg; do
             [ -f "$f" ] && cp "$f" "$DIR/app/"
           done
-          for d in qwenpaw scripts resources assets docs; do
+          for d in src/qwenpaw scripts plugins; do
             [ -d "$d" ] && cp -r "$d" "$DIR/app/"
           done
           # Copy console dist
@@ -305,6 +313,8 @@ jobs:
             p="$DIR/runtime/lib/python"*/site-packages/$pkg
             [ -d "$p" ] && rm -rf "$p" && echo "Removed: $pkg"
           done
+          # Remove orphan .pth files referencing deleted packages
+          find "$DIR/runtime" -path "*/site-packages/*.pth" -delete 2>/dev/null || true
 
           # Remove GPU-related packages from site-packages
           echo "Removing GPU packages from site-packages..."
@@ -341,7 +351,7 @@ jobs:
           #!/bin/bash
           SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
           export PYTHONHOME="$SCRIPT_DIR/runtime"
-          export PYTHONPATH="$SCRIPT_DIR/app"
+          export PYTHONPATH="$SCRIPT_DIR/app/src"
           cd "$SCRIPT_DIR/app"
           exec "$SCRIPT_DIR/runtime/bin/python3" -m qwenpaw "$@"
           SCRIPTEOF
@@ -351,7 +361,7 @@ jobs:
           #!/bin/bash
           SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
           export PYTHONHOME="$SCRIPT_DIR/../runtime"
-          export PYTHONPATH="$SCRIPT_DIR/../app"
+          export PYTHONPATH="$SCRIPT_DIR/../app/src"
           cd "$SCRIPT_DIR/../app"
           exec "$SCRIPT_DIR/../runtime/bin/python3" -m qwenpaw app
           SCRIPTEOF
